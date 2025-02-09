@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Remediation Guidance</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <h1>Remediation Guidance</h1>
+    {% if results['SQL Injection'] != "No SQL Injection vulnerability detected." %}
+      <h2>SQL Injection Remediation</h2>
+      <p>• Use prepared statements and parameterized queries.</p>
+      <p>• Sanitize and validate all user inputs.</p>
+      <p>• Avoid dynamically constructing SQL queries with user-supplied data.</p>
+    {% endif %}
+    
+    {% if results['Cross-Site Scripting'] != "No Cross-Site Scripting vulnerability detected." %}
+      <h2>XSS Remediation</h2>
+      <p>• Validate and sanitize all inputs that are rendered on web pages.</p>
+      <p>• Use proper output encoding/escaping.</p>
+      <p>• Implement Content Security Policy (CSP) headers.</p>
+    {% endif %}
+    <a href="{{ url_for('results') }}">Back to Results</a>
+    <br><br>
+    <a href="{{ url_for('index') }}">New Scan</a>
+  </body>
+</html>

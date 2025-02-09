@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Scan Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <h1>Scan Results</h1>
+    {% for vuln, result in results.items() %}
+      <h2>{{ vuln }}</h2>
+      {% if result is string %}
+        <p>{{ result }}</p>
+      {% else %}
+        <ul>
+          {% for item in result %}
+            <li>
+              <strong>Payload:</strong> {{ item.payload if item.payload is defined else 'N/A' }}<br>
+              <strong>Evidence:</strong> {{ item.evidence if item.evidence is defined else item.error }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endfor %}
+    <a href="{{ url_for('guidance') }}">See Remediation Guidance</a>
+    <br><br>
+    <a href="{{ url_for('index') }}">New Scan</a>
+  </body>
+</html>
