@@ -11,7 +11,13 @@ log = logging.getLogger(__name__)
 SEVERITY_ICON = {'Critical': '🔴', 'High': '🟠', 'Medium': '🟡', 'Low': '🔵'}
 
 def _describe(row):
-    return f"{SEVERITY_ICON.get(row['severity'], '')} [{row['severity']}] {row['title']}\n   {row['detail']}\n   Fix: {row['fix']}"
+    lines = [f"{SEVERITY_ICON.get(row['severity'], '')} [{row['severity']}] {row['title']}", f"   {row['detail']}"]
+    if row['analyst_note']:
+        lines.append(f"   Analyst note: {row['analyst_note']}")
+    lines.append(f"   Fix: {row['fix']}")
+    if row['evidence']:
+        lines.append(f"   Evidence: {row['evidence']}")
+    return '\n'.join(lines)
 
 def format_changes(site, opened, resolved):
     subject = f"[VulnScan] {site['name']}: {len(opened)} new, {len(resolved)} fixed"
@@ -35,6 +41,13 @@ def format_digest(site, open_rows):
     else:
         body = [f"All clear: no open issues on {site['name']} ({site['url']}). Monitoring is active."]
     return subject, '\n'.join(body)
+
+def format_review_request(site, opened):
+    subject = f"[VulnScan] Review needed: {len(opened)} new finding(s) on {site['name']}"
+    lines = [f"New findings on {site['name']} ({site['url']}) are waiting for your review.",
+             'The client has not been told yet.', '']
+    lines += [_describe(row) for row in opened]
+    return subject, '\n'.join(lines)
 
 def format_unverified(site):
     subject = f"[VulnScan] Monitoring paused for {site['name']}"
@@ -66,6 +79,11 @@ def send_telegram(chat_id, text):
                              timeout=20)
     response.raise_for_status()
     return True
+
+def notify_admin(subject, text):
+    """Message the analyst running the service. Returns the channels that succeeded."""
+    return notify({'id': 'admin', 'owner_email': config.ADMIN_EMAIL,
+                   'telegram_chat_id': config.ADMIN_TELEGRAM_CHAT_ID}, subject, text)
 
 def notify(site, subject, text):
     """Send to every channel the site has. Returns the channels that succeeded."""

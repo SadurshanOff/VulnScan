@@ -20,15 +20,32 @@ def run_scan(conn, site):
         notify.notify(site, *notify.format_unverified(site))
         return [], []
 
-    findings, error = checks.run_all(site['url'])
+    findings, error = checks.run_all(site['url'], active=bool(site['active_tests']))
     opened, resolved = db.record_scan(conn, site['id'], started_at, findings, error)
     db.schedule_next(conn, site)
     if error:
         log.warning('Scan of %s failed: %s', site['url'], error)
-    if opened or resolved:
-        notify.notify(site, *notify.format_changes(site, opened, resolved))
+
+    if opened and config.REVIEW_REQUIRED:
+        notify.notify_admin(*notify.format_review_request(site, opened))
+    elif opened:
+        for row in opened:
+            db.review_finding(conn, row['id'], 'approved')
+    # The client only hears that something is fixed if they were told it was broken
+    fixed = [row for row in resolved if row['notified_at']]
+    notify_client(conn, site, fixed)
     log.info('Scanned %s: %d new, %d resolved', site['url'], len(opened), len(resolved))
     return opened, resolved
+
+def notify_client(conn, site, fixed=()):
+    """Send the client every approved finding they have not heard about yet, plus any fixes."""
+    new = db.unnotified_approved(conn, site['id'])
+    if not new and not fixed:
+        return []
+    sent = notify.notify(site, *notify.format_changes(site, new, list(fixed)))
+    if sent:
+        db.mark_notified(conn, new)
+    return sent
 
 def digest_due(site):
     if not site['last_digest_at']:
@@ -46,7 +63,7 @@ def run_due(conn):
             continue
         site = db.get_site(conn, site['id'])
         if site['verified_at'] and digest_due(site):
-            notify.notify(site, *notify.format_digest(site, db.open_findings(conn, site['id'])))
+            notify.notify(site, *notify.format_digest(site, db.open_findings(conn, site['id'], 'approved')))
             db.mark_digest_sent(conn, site['id'])
 
 def main():

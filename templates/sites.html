@@ -9,18 +9,19 @@
     <h1>Monitored Sites</h1>
     {% include '_flashes.html' %}
     <table>
-      <tr><th>Name</th><th>URL</th><th>Status</th><th>Open issues</th><th>Last scan</th><th>Next scan</th></tr>
+      <tr><th>Name</th><th>URL</th><th>Status</th><th>To review</th><th>Open issues</th><th>Last scan</th><th>Next scan</th></tr>
       {% for site in sites %}
         <tr>
           <td><a href="{{ url_for('site_detail', site_id=site.id) }}">{{ site.name }}</a></td>
           <td>{{ site.url }}</td>
-          <td>{{ 'Monitoring' if site.verified_at else 'Awaiting verification' }}</td>
+          <td>{{ 'Monitoring' if site.verified_at and site.authorised_on else ('Awaiting authorisation' if not site.authorised_on else 'Awaiting verification') }}</td>
+          <td>{{ site.pending_count }}</td>
           <td>{{ site.open_count }}</td>
           <td>{{ site.last_scan_at or '-' }}</td>
           <td>{{ site.next_scan_at or ('due' if site.verified_at else '-') }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="6">No sites yet. Add your first client below.</td></tr>
+        <tr><td colspan="7">No sites yet. Add your first client below.</td></tr>
       {% endfor %}
     </table>
 

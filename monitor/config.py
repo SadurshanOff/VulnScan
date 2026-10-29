@@ -15,3 +15,9 @@ SMTP_FROM = os.environ.get('SMTP_FROM', SMTP_USER or 'vulnscan@localhost')
 SMTP_STARTTLS = os.environ.get('SMTP_STARTTLS', '1') == '1'
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+
+# When on, new findings wait for analyst approval before the client is alerted
+REVIEW_REQUIRED = os.environ.get('VULNSCAN_REVIEW_REQUIRED', '1') == '1'
+# Where review requests go (the analyst running the service)
+ADMIN_EMAIL = os.environ.get('VULNSCAN_ADMIN_EMAIL')
+ADMIN_TELEGRAM_CHAT_ID = os.environ.get('VULNSCAN_ADMIN_TELEGRAM_CHAT_ID')
