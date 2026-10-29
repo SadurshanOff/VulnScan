@@ -78,3 +78,33 @@ def notify(site, subject, text):
         except Exception:
             log.exception('Sending %s alert for site %s failed', channel, site['id'])
     return sent
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='Send a test alert to check email and Telegram settings')
+    parser.add_argument('--email', help='address to send a test email to')
+    parser.add_argument('--telegram', help='Telegram chat id to send a test message to')
+    args = parser.parse_args()
+    if not args.email and not args.telegram:
+        parser.error('give --email and/or --telegram')
+    logging.basicConfig(level=logging.INFO)
+
+    subject = '[VulnScan] Test alert'
+    text = 'This is a test message from VulnScan Monitor. If you can read it, alerts are set up correctly.'
+    ok = True
+    for channel, target, send, missing in (
+            ('email', args.email, lambda: send_email(args.email, subject, text), 'SMTP_HOST is not set'),
+            ('telegram', args.telegram, lambda: send_telegram(args.telegram, f'{subject}\n\n{text}'),
+             'TELEGRAM_BOT_TOKEN is not set')):
+        if not target:
+            continue
+        try:
+            sent = send()
+        except Exception as e:
+            sent, missing = False, f'{type(e).__name__}: {e}'
+        print(f'{channel}: {"sent to " + target if sent else "FAILED (" + missing + ")"}')
+        ok = ok and sent
+    raise SystemExit(0 if ok else 1)
+
+if __name__ == '__main__':
+    main()
