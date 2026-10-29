@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>VulnScan - Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <h1>VulnScan Monitor</h1>
+    {% include '_flashes.html' %}
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="password">Admin password:</label>
+      <input type="password" id="password" name="password" autofocus>
+      <button type="submit">Log in</button>
+    </form>
+  </body>
+</html>

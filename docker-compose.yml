@@ -1,0 +1,18 @@
+services:
+  web:
+    build: .
+    env_file: .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - data:/data
+    restart: unless-stopped
+  worker:
+    build: .
+    command: ["python", "-m", "monitor.worker"]
+    env_file: .env
+    volumes:
+      - data:/data
+    restart: unless-stopped
+volumes:
+  data:

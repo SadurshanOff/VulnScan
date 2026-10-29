@@ -1,105 +1,89 @@
-Below is a sample README file description you can use (or modify) for your VulnScan project:
+# VulnScan Monitor
 
----
+VulnScan Monitor watches websites around the clock for common security problems and alerts the site owner by email or Telegram when something new appears, and again when it is fixed. It is built for small businesses that have no security team.
 
-# VulnScan: Vulnerability Assessment Tool
+> **Important:**
+> **Only monitor sites you own or have written permission to test.** VulnScan refuses to scan a site until its owner proves control of it by publishing a verification file.
 
-## Overview
+## What it checks
 
-**VulnScan** is a lightweight vulnerability assessment tool designed for educational and authorized penetration testing. It scans web applications for common vulnerabilities such as **SQL Injection** and **Cross-Site Scripting (XSS)**. The tool features a simple, user-friendly dashboard built with Flask, where users can input target URLs, view scan results, and access remediation guidance.
+All checks are low-impact (about 15 ordinary requests per scan) and never modify data.
 
-> **Important:**  
-> **Only use this tool on systems or networks you own or have explicit permission to test. Unauthorized scanning is illegal and unethical.**
+| Check | Catches |
+| --- | --- |
+| TLS certificate | Invalid, expired, or expiring within 14 / 30 days |
+| HTTPS | Site on plain HTTP, or HTTP not redirecting to HTTPS |
+| Security headers | Missing HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy |
+| Cookies | Missing Secure / HttpOnly flags |
+| Version disclosure | `Server` or `X-Powered-By` revealing software versions |
+| Exposed files | Public `.git`, `.env`, config backups, database dumps, `phpinfo.php`, `.DS_Store` |
+| SQL injection | Database errors returned when a quote is added to the `id` parameter |
+| Reflected XSS | A script in the `q` parameter echoed back unescaped |
 
-## Features
+Each finding is alerted once. When a later scan no longer sees it, the owner gets a "fixed" message. A weekly summary confirms monitoring is alive.
 
-- **Automated Vulnerability Scanning:**  
-  Perform tests for SQL Injection and XSS by sending test payloads and analyzing responses.
-  
-- **Web-Based Dashboard:**  
-  Interact with the tool via a Flask-based web interface for inputting targets and viewing detailed results.
-  
-- **Remediation Guidance:**  
-  Receive tips on how to address detected vulnerabilities.
-  
-- **Modular Architecture:**  
-  Easily extend the tool by adding new vulnerability modules.
+## How it works
 
-## Installation
+- **Dashboard** (`app.py`): password-protected pages to add client sites, verify ownership, scan on demand and review findings. The original one-off scanner is still at `/`.
+- **Worker** (`monitor/worker.py`): wakes every minute and scans each verified site when it is due (every 6 hours by default). It re-checks the verification file before every scan and pauses monitoring if it has been removed.
+- **Checks** (`monitor/checks.py`), **storage** (`monitor/db.py`, SQLite), **alerts** (`monitor/notify.py`, SMTP and the Telegram Bot API).
 
-1. **Clone the Repository:**
-   ```bash
-   git clone https://github.com/yourusername/vulnscan.git
-   cd vulnscan
-   ```
+## Running it
 
-2. **Create and Activate a Virtual Environment:**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+### With Docker (recommended for production)
 
-3. **Install Dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **(Optional) Configuration:**  
-   - `VULNSCAN_SECRET_KEY`: Flask secret key. A random key is generated on each start if unset.
-   - `VULNSCAN_ALLOW_PRIVATE=1`: allow scanning localhost and private network addresses (e.g. a local DVWA lab). These are blocked by default.
-   - `FLASK_DEBUG=1`: enable debug mode. Only use this on a machine nobody else can reach.
-
-## Usage
-
-1. **Start the Flask Application:**
-   ```bash
-   python app.py
-   ```
-   
-2. **Open Your Browser:**  
-   Navigate to [http://127.0.0.1:5000](http://127.0.0.1:5000)
-
-3. **Run a Scan:**  
-   Enter the full target URL (starting with `http://` or `https://`) in the provided form and click **"Start Scan"**.  
-   The scan will run tests for SQL Injection and XSS vulnerabilities.
-
-4. **View Results and Guidance:**  
-   - **Results Page:** Displays details about any vulnerabilities found.
-   - **Guidance Page:** Offers remediation suggestions based on scan results.
-
-## Directory Structure
-
+```bash
+cp .env.example .env    # then edit .env
+docker compose up -d --build
 ```
-vulnscan/
-├── app.py                # Flask application entry point
-├── scanner/              # Contains scanner modules for vulnerability tests
-│   ├── __init__.py
-│   ├── scanner.py        # Orchestrates vulnerability tests
-│   ├── target.py         # Validates target URLs before scanning
-│   ├── sql_injection.py  # SQL Injection testing module
-│   └── xss.py            # XSS testing module
-├── templates/            # HTML templates for the dashboard
-│   ├── index.html        # Home page with target URL input form
-│   ├── results.html      # Scan results display
-│   └── guidance.html     # Remediation guidance page
-├── static/               # Static assets (e.g., CSS)
-│   └── style.css         # Basic styling for the dashboard
-├── requirements.txt      # Python package dependencies
-└── README.md             # This README file
+
+The dashboard listens on `127.0.0.1:8000`. Put it behind a reverse proxy with HTTPS (Caddy or nginx) before exposing it.
+
+### Locally
+
+```bash
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+export VULNSCAN_ADMIN_PASSWORD=change-me
+python app.py                 # dashboard on http://127.0.0.1:5000
+python -m monitor.worker      # in a second terminal: the 24/7 agent
 ```
+
+`python -m monitor.worker --once` runs a single pass, which is useful from cron.
+
+### Configuration
+
+All settings are environment variables; see [`.env.example`](.env.example).
+
+| Variable | Purpose |
+| --- | --- |
+| `VULNSCAN_ADMIN_PASSWORD` | Dashboard password (required) |
+| `VULNSCAN_SECRET_KEY` | Flask secret key; random per start if unset |
+| `VULNSCAN_DB` | SQLite path (default `vulnscan.db`) |
+| `VULNSCAN_SCAN_INTERVAL_HOURS` | Hours between scans of a site (default 6) |
+| `VULNSCAN_DIGEST_INTERVAL_DAYS` | Days between summary messages (default 7) |
+| `VULNSCAN_CONTACT_URL` | Shown in the scanner's User-Agent so site hosts know who is scanning |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | Email alerts |
+| `TELEGRAM_BOT_TOKEN` | Telegram alerts (create a bot with @BotFather) |
+| `VULNSCAN_ALLOW_PRIVATE=1` | Allow localhost / private network targets, for lab testing only |
+| `FLASK_DEBUG=1` | Debug mode; never on a reachable host |
+
+## Onboarding a client
+
+1. Get the client's written permission to monitor their site.
+2. In the dashboard, open **Monitored sites** and add the site with the owner's email and/or Telegram chat id. To find a chat id, the owner messages your bot and you open `https://api.telegram.org/bot<token>/getUpdates`.
+3. Send the owner the verification token shown on the site page. They publish it as the only content of `https://their-site/.well-known/vulnscan-verify.txt`.
+4. Click **Verify**. The worker starts scanning on its next pass, and the owner gets their first report.
+
+## Development
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+```
+
+The tests start local HTTP servers, so they need no network access.
 
 ## Disclaimer
 
-This project is provided for **educational purposes only**. **Do not** use VulnScan on systems or networks without explicit permission. The developer assumes no responsibility for any misuse of this tool. Always ensure that you have proper authorization before performing any vulnerability assessments.
-
-## Future Enhancements
-
-- **Additional Vulnerability Tests:** Incorporate checks for CSRF, file inclusion, and more.
-- **Asynchronous Scanning:** Use asynchronous requests or threading to improve performance.
-- **Database Integration:** Store scan history and results.
-- **User Authentication:** Secure the dashboard with login functionality.
-- **Improved UI/UX:** Enhance the front-end design and interactivity.
-
----
-
-Feel free to adjust the content to better fit your project's specifics or to include any additional information that you think is relevant.
+Provided for authorised security monitoring only. The developer assumes no responsibility for misuse. Always have written permission before scanning a site.
