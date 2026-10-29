@@ -7,14 +7,14 @@
   </head>
   <body>
     <h1>Remediation Guidance</h1>
-    {% if results['SQL Injection'] != "No SQL Injection vulnerability detected." %}
+    {% if results['SQL Injection'] and results['SQL Injection'].vulnerabilities %}
       <h2>SQL Injection Remediation</h2>
       <p>• Use prepared statements and parameterized queries.</p>
       <p>• Sanitize and validate all user inputs.</p>
       <p>• Avoid dynamically constructing SQL queries with user-supplied data.</p>
     {% endif %}
     
-    {% if results['Cross-Site Scripting'] != "No Cross-Site Scripting vulnerability detected." %}
+    {% if results['Cross-Site Scripting'] and results['Cross-Site Scripting'].vulnerabilities %}
       <h2>XSS Remediation</h2>
       <p>• Validate and sanitize all inputs that are rendered on web pages.</p>
       <p>• Use proper output encoding/escaping.</p>

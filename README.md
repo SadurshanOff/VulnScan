@@ -44,11 +44,10 @@ Below is a sample README file description you can use (or modify) for your VulnS
    pip install -r requirements.txt
    ```
 
-4. **(Optional) Downgrade Werkzeug:**  
-   If you encounter issues like an `ImportError` for `url_quote`, downgrade Werkzeug:
-   ```bash
-   pip install werkzeug==2.0.3
-   ```
+4. **(Optional) Configuration:**  
+   - `VULNSCAN_SECRET_KEY`: Flask secret key. A random key is generated on each start if unset.
+   - `VULNSCAN_ALLOW_PRIVATE=1`: allow scanning localhost and private network addresses (e.g. a local DVWA lab). These are blocked by default.
+   - `FLASK_DEBUG=1`: enable debug mode. Only use this on a machine nobody else can reach.
 
 ## Usage
 
@@ -61,7 +60,7 @@ Below is a sample README file description you can use (or modify) for your VulnS
    Navigate to [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
 3. **Run a Scan:**  
-   Enter the target URL in the provided form and click **"Start Scan"**.  
+   Enter the full target URL (starting with `http://` or `https://`) in the provided form and click **"Start Scan"**.  
    The scan will run tests for SQL Injection and XSS vulnerabilities.
 
 4. **View Results and Guidance:**  
@@ -76,6 +75,7 @@ vulnscan/
 ├── scanner/              # Contains scanner modules for vulnerability tests
 │   ├── __init__.py
 │   ├── scanner.py        # Orchestrates vulnerability tests
+│   ├── target.py         # Validates target URLs before scanning
 │   ├── sql_injection.py  # SQL Injection testing module
 │   └── xss.py            # XSS testing module
 ├── templates/            # HTML templates for the dashboard

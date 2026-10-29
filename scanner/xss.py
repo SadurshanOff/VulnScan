@@ -2,18 +2,19 @@ import requests
 
 def test_xss(target_url):
     vulnerabilities = []
+    errors = []
     payload = "<script>alert('XSS')</script>"
     params = {'q': payload}
     try:
-        response = requests.get(target_url, params=params, timeout=5)
+        response = requests.get(target_url, params=params, timeout=5, allow_redirects=False)
         if payload in response.text:
             vulnerabilities.append({
                 'payload': payload,
                 'evidence': 'XSS payload was reflected in the response.'
             })
-    except Exception as e:
-        vulnerabilities.append({
+    except requests.RequestException as e:
+        errors.append({
             'payload': payload,
             'error': str(e)
         })
-    return vulnerabilities if vulnerabilities else "No Cross-Site Scripting vulnerability detected."
+    return {'vulnerabilities': vulnerabilities, 'errors': errors}
