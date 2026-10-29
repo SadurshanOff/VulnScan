@@ -1,4 +1,3 @@
-import requests
 from scanner import sql_injection, xss
 
 def start_scan(target_url):

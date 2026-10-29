@@ -9,14 +9,27 @@
     <h1>Scan Results</h1>
     {% for vuln, result in results.items() %}
       <h2>{{ vuln }}</h2>
-      {% if result is string %}
-        <p>{{ result }}</p>
-      {% else %}
+      {% if result.vulnerabilities %}
         <ul>
-          {% for item in result %}
+          {% for item in result.vulnerabilities %}
             <li>
-              <strong>Payload:</strong> {{ item.payload if item.payload is defined else 'N/A' }}<br>
-              <strong>Evidence:</strong> {{ item.evidence if item.evidence is defined else item.error }}
+              <strong>Payload:</strong> {{ item.payload }}<br>
+              <strong>Evidence:</strong> {{ item.evidence }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% elif result.errors %}
+        <p>Test could not be completed.</p>
+      {% else %}
+        <p>No {{ vuln }} vulnerability detected.</p>
+      {% endif %}
+      {% if result.errors %}
+        <h3>Scan errors</h3>
+        <ul>
+          {% for item in result.errors %}
+            <li class="danger">
+              <strong>Payload:</strong> {{ item.payload }}<br>
+              <strong>Error:</strong> {{ item.error }}
             </li>
           {% endfor %}
         </ul>
