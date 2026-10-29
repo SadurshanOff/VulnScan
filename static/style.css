@@ -25,3 +25,32 @@ li.info {
 li.danger {
     color: red;
 }
+table {
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+th, td {
+    border: 1px solid #ccc;
+    padding: 5px 10px;
+    text-align: left;
+}
+form.stacked label {
+    display: block;
+    margin-bottom: 8px;
+}
+form.inline {
+    display: inline;
+}
+pre {
+    background: #f4f4f4;
+    padding: 8px;
+}
+.finding {
+    border-left: 4px solid #999;
+    padding: 6px 10px;
+    margin-bottom: 10px;
+}
+.sev-critical { border-color: #c00; }
+.sev-high { border-color: #e67300; }
+.sev-medium { border-color: #e6b800; }
+.sev-low { border-color: #3366cc; }

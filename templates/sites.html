@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>VulnScan - Monitored Sites</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <h1>Monitored Sites</h1>
+    {% include '_flashes.html' %}
+    <table>
+      <tr><th>Name</th><th>URL</th><th>Status</th><th>Open issues</th><th>Last scan</th><th>Next scan</th></tr>
+      {% for site in sites %}
+        <tr>
+          <td><a href="{{ url_for('site_detail', site_id=site.id) }}">{{ site.name }}</a></td>
+          <td>{{ site.url }}</td>
+          <td>{{ 'Monitoring' if site.verified_at else 'Awaiting verification' }}</td>
+          <td>{{ site.open_count }}</td>
+          <td>{{ site.last_scan_at or '-' }}</td>
+          <td>{{ site.next_scan_at or ('due' if site.verified_at else '-') }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6">No sites yet. Add your first client below.</td></tr>
+      {% endfor %}
+    </table>
+
+    <h2>Add a site</h2>
+    <form method="POST" class="stacked">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Client or site name <input type="text" name="name" placeholder="Acme Bakery"></label>
+      <label>Site URL <input type="text" name="url" placeholder="https://acmebakery.com"></label>
+      <label>Owner email <input type="text" name="owner_email" placeholder="owner@acmebakery.com"></label>
+      <label>Telegram chat id <input type="text" name="telegram_chat_id" placeholder="123456789"></label>
+      <button type="submit">Add site</button>
+    </form>
+    <p>Only add sites whose owner has given you written permission to monitor them.</p>
+    <br>
+    <a href="{{ url_for('index') }}">One-off scan</a>
+    <form method="POST" action="{{ url_for('logout') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Log out</button>
+    </form>
+  </body>
+</html>

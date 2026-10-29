@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>VulnScan - {{ site.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <h1>{{ site.name }}</h1>
+    {% include '_flashes.html' %}
+    <p>
+      <strong>URL:</strong> {{ site.url }}<br>
+      <strong>Alerts to:</strong> {{ site.owner_email or '' }} {{ ('Telegram ' ~ site.telegram_chat_id) if site.telegram_chat_id else '' }}<br>
+      <strong>Scan every:</strong> {{ site.interval_hours }} hours<br>
+      <strong>Status:</strong> {{ ('Monitoring since ' ~ site.verified_at) if site.verified_at else 'Awaiting verification' }}
+    </p>
+
+    {% if not site.verified_at %}
+      <h2>Verify ownership</h2>
+      <p>Ask the site owner to create a file at <code>{{ verification_url }}</code> containing exactly:</p>
+      <pre>{{ site.verify_token }}</pre>
+    {% endif %}
+    <form method="POST" action="{{ url_for('site_verify', site_id=site.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Verify</button>
+    </form>
+    {% if site.verified_at %}
+      <form method="POST" action="{{ url_for('site_scan', site_id=site.id) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Scan now</button>
+      </form>
+    {% endif %}
+    <form method="POST" action="{{ url_for('site_delete', site_id=site.id) }}" class="inline"
+          onsubmit="return confirm('Stop monitoring and delete all history for this site?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Delete</button>
+    </form>
+
+    <h2>Open issues ({{ findings|length }})</h2>
+    {% for f in findings %}
+      <div class="finding sev-{{ f.severity|lower }}">
+        <strong>[{{ f.severity }}] {{ f.title }}</strong><br>
+        {{ f.detail }}<br>
+        <em>Fix:</em> {{ f.fix }}<br>
+        <small>First seen {{ f.first_seen }}</small>
+      </div>
+    {% else %}
+      <p>No open issues.</p>
+    {% endfor %}
+
+    <h2>Recent scans</h2>
+    <table>
+      <tr><th>Started</th><th>Status</th><th>New</th><th>Fixed</th><th>Error</th></tr>
+      {% for s in scans %}
+        <tr><td>{{ s.started_at }}</td><td>{{ s.status }}</td><td>{{ s.opened }}</td><td>{{ s.resolved }}</td><td>{{ s.error or '' }}</td></tr>
+      {% else %}
+        <tr><td colspan="5">No scans yet.</td></tr>
+      {% endfor %}
+    </table>
+    <br>
+    <a href="{{ url_for('sites') }}">All sites</a>
+  </body>
+</html>
