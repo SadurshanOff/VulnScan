@@ -129,7 +129,11 @@ def load_site(site_id):
 def site_detail(site_id):
     site = load_site(site_id)
     conn = get_db()
-    return render_template('site.html', site=site, findings=db.open_findings(conn, site_id),
+    return render_template('site.html', site=site,
+                           pending=db.open_findings(conn, site_id, 'pending'),
+                           approved=db.open_findings(conn, site_id, 'approved'),
+                           dismissed=db.open_findings(conn, site_id, 'dismissed'),
+                           unnotified=db.unnotified_approved(conn, site_id),
                            scans=db.recent_scans(conn, site_id),
                            verification_url=verify.verification_url(site['url']))
 
@@ -148,12 +152,64 @@ def site_verify(site_id):
 @login_required
 def site_scan(site_id):
     site = load_site(site_id)
-    if not site['verified_at']:
+    if not site['authorised_on']:
+        flash('Record the client\'s written authorisation before scanning this site', 'danger')
+    elif not site['verified_at']:
         flash('Verify ownership before scanning this site', 'danger')
     else:
         opened, resolved = worker.run_scan(get_db(), site)
         flash(f'Scan finished: {len(opened)} new, {len(resolved)} fixed', 'info')
     return redirect(url_for('site_detail', site_id=site_id))
+
+@app.route('/sites/<int:site_id>/authorisation', methods=['POST'])
+@login_required
+def site_authorisation(site_id):
+    load_site(site_id)
+    authorised_on = (request.form.get('authorised_on') or '').strip()
+    reference = (request.form.get('authorisation_ref') or '').strip()
+    if not authorised_on or not reference:
+        flash('Enter the date the client signed and a reference to the signed document', 'danger')
+    else:
+        db.set_authorisation(get_db(), site_id, authorised_on, reference,
+                             (request.form.get('scope_notes') or '').strip(),
+                             request.form.get('active_tests') == '1')
+        flash('Authorisation recorded', 'info')
+    return redirect(url_for('site_detail', site_id=site_id))
+
+@app.route('/findings/<int:finding_id>/review', methods=['POST'])
+@login_required
+def finding_review(finding_id):
+    conn = get_db()
+    row = db.get_finding(conn, finding_id)
+    if row is None:
+        abort(404)
+    status = request.form.get('status')
+    if status not in db.STATUSES:
+        abort(400)
+    db.review_finding(conn, finding_id, status, (request.form.get('analyst_note') or '').strip())
+    return redirect(url_for('site_detail', site_id=row['site_id']))
+
+@app.route('/sites/<int:site_id>/notify', methods=['POST'])
+@login_required
+def site_notify(site_id):
+    site = load_site(site_id)
+    sent = worker.notify_client(get_db(), site)
+    if sent:
+        flash(f'Approved findings sent to the client by {" and ".join(sent)}', 'info')
+    else:
+        flash('Nothing was sent: no new approved findings, or no working alert channel', 'danger')
+    return redirect(url_for('site_detail', site_id=site_id))
+
+@app.route('/sites/<int:site_id>/report')
+@login_required
+def site_report(site_id):
+    site = load_site(site_id)
+    conn = get_db()
+    days = request.args.get('days', 30, type=int)
+    return render_template('report.html', site=site, days=days, generated_at=db.now(),
+                           findings=db.open_findings(conn, site_id, 'approved'),
+                           fixed=db.resolved_since(conn, site_id, db.later(days=-days)),
+                           last_scan=next(iter(db.recent_scans(conn, site_id, 1)), None))
 
 @app.route('/sites/<int:site_id>/delete', methods=['POST'])
 @login_required

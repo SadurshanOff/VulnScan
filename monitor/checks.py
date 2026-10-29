@@ -19,8 +19,12 @@ from scanner.target import validate_target
 TIMEOUT = 10
 MAX_BODY = 64 * 1024
 
-def finding(check, key, severity, title, detail, fix):
-    return {'check': check, 'key': key, 'severity': severity, 'title': title, 'detail': detail, 'fix': fix}
+def finding(check, key, severity, title, detail, fix, evidence=''):
+    return {'check': check, 'key': key, 'severity': severity, 'title': title, 'detail': detail, 'fix': fix,
+            'evidence': evidence}
+
+def _observed(response):
+    return f'GET {response.url} returned HTTP {response.status_code}'
 
 def safe_get(url, max_redirects=5):
     """GET a URL, following redirects only to hosts that pass validate_target."""
@@ -41,7 +45,8 @@ def check_tls(url):
     if parsed.scheme != 'https':
         return [finding('tls', 'no-https', 'Medium', 'Site is not served over HTTPS',
                         f'{parsed.hostname} is monitored over plain HTTP, so traffic can be read or altered in transit.',
-                        'Install a free certificate (for example Let\'s Encrypt) and redirect all HTTP traffic to HTTPS.')]
+                        'Install a free certificate (for example Let\'s Encrypt) and redirect all HTTP traffic to HTTPS.',
+                        f'Monitored URL uses the http:// scheme: {url}')]
     host, port = parsed.hostname, parsed.port or 443
     context = ssl.create_default_context()
     try:
@@ -51,7 +56,8 @@ def check_tls(url):
     except ssl.SSLCertVerificationError as e:
         return [finding('tls', 'invalid-cert', 'Critical', 'SSL certificate is invalid',
                         f'Browsers will show a security warning for {host}: {e.verify_message}.',
-                        'Renew or replace the certificate so it is valid, trusted and matches the domain name.')]
+                        'Renew or replace the certificate so it is valid, trusted and matches the domain name.',
+                        f'TLS handshake with {host}:{port} failed certificate verification: {e.verify_message}')]
     except (OSError, ssl.SSLError):
         return []
     expires = datetime.fromtimestamp(ssl.cert_time_to_seconds(cert['notAfter']), timezone.utc)
@@ -66,7 +72,8 @@ def check_tls(url):
         return []
     return [finding('tls', key, severity, f'SSL certificate expires in {days} days' if days >= 0 else 'SSL certificate has expired',
                     f'The certificate for {host} expires on {expires:%Y-%m-%d}.',
-                    'Renew the certificate now, and enable automatic renewal so it does not lapse again.')]
+                    'Renew the certificate now, and enable automatic renewal so it does not lapse again.',
+                    f'Certificate presented by {host}:{port} has notAfter = {cert["notAfter"]}')]
 
 def check_https_redirect(url):
     parsed = urlparse(url)
@@ -84,7 +91,8 @@ def check_https_redirect(url):
     if response.status_code < 400:
         return [finding('https-redirect', 'no-redirect', 'Medium', 'HTTP version of the site does not redirect to HTTPS',
                         f'{plain} answers with status {response.status_code} instead of redirecting to HTTPS.',
-                        'Configure the web server to send a permanent (301) redirect from HTTP to HTTPS.')]
+                        'Configure the web server to send a permanent (301) redirect from HTTP to HTTPS.',
+                        f'GET {plain} returned HTTP {response.status_code} with no redirect to https://')]
     return []
 
 SECURITY_HEADERS = [
@@ -116,7 +124,8 @@ def check_headers(url, response):
             continue
         if name == 'X-Frame-Options' and 'frame-ancestors' in csp:
             continue
-        results.append(finding('headers', name.lower(), severity, f'Missing {name} header', detail, fix))
+        results.append(finding('headers', name.lower(), severity, f'Missing {name} header', detail, fix,
+                               f'{_observed(response)} without a {name} header'))
     return results
 
 def check_cookies(url, response):
@@ -134,7 +143,8 @@ def check_cookies(url, response):
             results.append(finding('cookies', name, 'Low', f'Cookie "{name}" is missing {" and ".join(missing)}',
                                    f'The "{name}" cookie is set without the {", ".join(missing)} flag(s), '
                                    'so it can be stolen by scripts or sent over unencrypted connections.',
-                                   'Set cookies with the Secure, HttpOnly and SameSite attributes.'))
+                                   'Set cookies with the Secure, HttpOnly and SameSite attributes.',
+                                   f'{_observed(response)}; Set-Cookie for "{name}" lacks {", ".join(missing)}'))
     return results
 
 def check_version_disclosure(url, response):
@@ -143,12 +153,14 @@ def check_version_disclosure(url, response):
     if re.search(r'\d', server):
         results.append(finding('disclosure', 'server', 'Low', 'Server header reveals software version',
                                f'The server identifies itself as "{server}", which helps attackers pick known exploits.',
-                               'Hide the version in the web server config (for example "server_tokens off" in nginx).'))
+                               'Hide the version in the web server config (for example "server_tokens off" in nginx).',
+                               f'{_observed(response)} with header Server: {server}'))
     powered = response.headers.get('X-Powered-By')
     if powered:
         results.append(finding('disclosure', 'x-powered-by', 'Low', 'X-Powered-By header reveals technology',
                                f'The site sends "X-Powered-By: {powered}".',
-                               'Remove the X-Powered-By header in the application or web server config.'))
+                               'Remove the X-Powered-By header in the application or web server config.',
+                               f'{_observed(response)} with header X-Powered-By: {powered}'))
     return results
 
 def _looks_like_env(body):
@@ -188,7 +200,9 @@ def check_exposed_files(url):
             results.append(finding('exposed-files', path, severity, title,
                                    f'{target} is readable by anyone on the internet.',
                                    f'Block access to {path} in the web server config, delete it from the web root, '
-                                   'and rotate any passwords or keys it contained.'))
+                                   'and rotate any passwords or keys it contained.',
+                                   f'GET {target} returned HTTP 200 with {len(body)} bytes matching the file format '
+                                   '(contents not stored)'))
     return results
 
 def check_injection(url, response):
@@ -197,15 +211,21 @@ def check_injection(url, response):
         if sql_injection.test_sql_injection(url)['vulnerabilities']:
             results.append(finding('sqli', 'id-param', 'High', 'Possible SQL injection',
                                    'Adding a quote to the "id" parameter makes the page return a database error.',
-                                   'Use parameterised queries (prepared statements) for every database query.'))
+                                   'Use parameterised queries (prepared statements) for every database query.',
+                                   f'GET {url} with id=\' returned a page containing a database error message'))
     if xss.test_xss(url)['vulnerabilities']:
         results.append(finding('xss', 'q-param', 'High', 'Reflected cross-site scripting (XSS)',
                                'A script passed in the "q" parameter is echoed back into the page without escaping.',
-                               'Escape all user input when rendering HTML, and add a Content-Security-Policy.'))
+                               'Escape all user input when rendering HTML, and add a Content-Security-Policy.',
+                               f'GET {url} with q=<script>alert(\'XSS\')</script> returned the script unescaped'))
     return results
 
-def run_all(url):
-    """Run every check. Returns (findings, error); error is set when the site could not be reached."""
+def run_all(url, active=False):
+    """Run every check. Returns (findings, error); error is set when the site could not be reached.
+
+    Active tests (SQL injection and XSS probes) only run when the client's written
+    authorisation explicitly covers them.
+    """
     if (error := validate_target(url)):
         return [], error
     findings = check_tls(url) + check_https_redirect(url)
@@ -217,5 +237,6 @@ def run_all(url):
     findings += check_cookies(url, response)
     findings += check_version_disclosure(url, response)
     findings += check_exposed_files(response.url or url)
-    findings += check_injection(response.url or url, response)
+    if active:
+        findings += check_injection(response.url or url, response)
     return findings, None

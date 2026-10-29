@@ -28,23 +28,53 @@ def test_wrong_password(client):
     r = client.post('/login', data={'password': 'nope', 'csrf_token': token(client, '/login')})
     assert b'Wrong password' in r.data
 
-def test_add_and_verify_site(client, fake_site):
+def test_full_service_flow(client, fake_site, monkeypatch):
+    from monitor import notify, verify
+    sent = []
+    monkeypatch.setattr(notify, 'notify', lambda site, subject, text: sent.append(subject) or ['email'])
+    fake_site.default = (200, {'X-Powered-By': 'PHP/7.2.1'}, b'<html></html>')
+
     login(client)
     t = token(client, '/sites')
     r = client.post('/sites', data={'csrf_token': t, 'name': 'Acme', 'url': fake_site.url,
                                     'owner_email': 'o@acme.test'})
     assert r.status_code == 302
-    page = client.get(r.headers['Location']).data.decode()
+    page = client.get('/sites/1').data.decode()
     verify_token = re.search(r'<pre>([^<]+)</pre>', page).group(1)
-    assert 'Awaiting verification' in page
+    assert 'awaiting verification' in page and 'scanning is blocked' in page
 
-    r = client.post(r.headers['Location'] + '/verify', data={'csrf_token': t}, follow_redirects=True)
+    r = client.post('/sites/1/verify', data={'csrf_token': t}, follow_redirects=True)
     assert b'Verification file not found' in r.data
-
-    from monitor import verify
     fake_site.routes[verify.VERIFY_PATH] = (200, {}, verify_token.encode())
     r = client.post('/sites/1/verify', data={'csrf_token': t}, follow_redirects=True)
-    assert b'Monitoring since' in r.data
+    assert b'verified 20' in r.data
+
+    # No scan without a recorded authorisation
+    r = client.post('/sites/1/scan', data={'csrf_token': t}, follow_redirects=True)
+    assert b'written authorisation' in r.data
+    r = client.post('/sites/1/authorisation', data={'csrf_token': t, 'authorised_on': '2026-10-29',
+                                                    'authorisation_ref': 'AUTH-001'}, follow_redirects=True)
+    assert b'passive checks only' in r.data
+
+    r = client.post('/sites/1/scan', data={'csrf_token': t}, follow_redirects=True)
+    assert b'Scan finished' in r.data and b'Waiting for your review (0)' not in r.data
+    assert all('Review needed' in s for s in sent)
+
+    from monitor import db
+    conn = db.connect()
+    pending = db.open_findings(conn, 1, 'pending')
+    powered = [f for f in pending if f['title'].startswith('X-Powered-By')][0]
+    client.post(f'/findings/{powered["id"]}/review', data={'csrf_token': t, 'status': 'approved',
+                                                           'analyst_note': 'Hides your PHP version'})
+    r = client.post('/sites/1/notify', data={'csrf_token': t}, follow_redirects=True)
+    assert b'sent to the client' in r.data
+    assert sent[-1] == '[VulnScan] Acme: 1 new, 0 fixed'
+
+    report = client.get('/sites/1/report').data.decode()
+    assert 'X-Powered-By header reveals technology' in report
+    assert 'Hides your PHP version' in report and 'AUTH-001' in report
+    # Pending findings never appear in the client report
+    assert 'Missing Content-Security-Policy header' not in report
 
 def test_add_site_needs_contact(client, fake_site):
     login(client)

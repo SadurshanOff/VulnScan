@@ -38,6 +38,7 @@ Open `.env` in an editor (`nano .env`) and set at least:
 | `VULNSCAN_SECRET_KEY` | A long random string. Generate one with `openssl rand -hex 32`. |
 | `VULNSCAN_ADMIN_PASSWORD` | A strong password for the dashboard. |
 | `VULNSCAN_DOMAIN` | Your dashboard domain, for example `monitor.yourcompany.com`. |
+| `VULNSCAN_ADMIN_EMAIL` / `VULNSCAN_ADMIN_TELEGRAM_CHAT_ID` | Where you, the analyst, get "review needed" messages. |
 | `VULNSCAN_CONTACT_URL` | A page about your service. It appears in the scanner's User-Agent so site hosts know who is checking. |
 
 ## 3. Set up Telegram alerts
@@ -85,16 +86,18 @@ Each channel prints `sent to ...` or `FAILED (...)` with the reason. Fix `.env`,
 ## 7. Run a pilot on your own site
 
 1. Open `https://monitor.yourcompany.com`, log in, and go to **Monitored sites**.
-2. Add your own website with your email and Telegram chat id.
+2. Add your own website with your email and Telegram chat id, then record an authorisation for it (for your own site, reference something like "own site").
 3. On the site's page, copy the verification token. Create a file at `https://yoursite.com/.well-known/vulnscan-verify.txt` containing only that token. On most hosts, that means creating a `.well-known` folder in the web root.
-4. Click **Verify**, then **Scan now**. You should get an alert listing what was found within a minute.
-5. Fix one finding, for example add a missing header, then click **Scan now** again. You should get a "fixed" message.
+4. Click **Verify**, then **Scan now / retest**. You get a "review needed" message within a minute.
+5. On the site page, approve the findings, then click **Send approved findings to the client**. The client alert arrives.
+6. Fix one finding, for example add a missing header, then click **Scan now / retest** again. You should get a "fixed" message.
+7. Open **Client report** and save it as PDF.
 
 From then on, the worker scans the site every 6 hours by itself.
 
 ## Onboarding a paying client
 
-1. Get written permission to monitor their site, covering scope, frequency and contact details.
+1. Get signed written authorisation covering scope, frequency, contact details, and whether active tests are allowed. Record it on the site page.
 2. Ask them to message your Telegram bot and send you their chat id, or just use their email.
 3. Add the site, send them the verification instructions from step 7, and click **Verify** once they have done it.
 

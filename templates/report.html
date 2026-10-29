@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Security report - {{ site.name }}</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 820px; margin: 30px auto; color: #222; line-height: 1.45; }
+      h1 { margin-bottom: 4px; }
+      .meta { color: #555; margin-top: 0; }
+      table { border-collapse: collapse; width: 100%; margin: 10px 0 20px; }
+      th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; vertical-align: top; }
+      .finding { border-left: 5px solid #999; padding: 8px 12px; margin-bottom: 14px; page-break-inside: avoid; }
+      .sev-critical { border-color: #c00; } .sev-high { border-color: #e67300; }
+      .sev-medium { border-color: #e6b800; } .sev-low { border-color: #3366cc; }
+      code { background: #f4f4f4; padding: 1px 4px; font-size: 0.9em; word-break: break-all; }
+      .noprint { margin-bottom: 20px; }
+      @media print { .noprint { display: none; } body { margin: 0; } }
+    </style>
+  </head>
+  <body>
+    <div class="noprint">
+      <button onclick="window.print()">Print / save as PDF</button>
+      <a href="{{ url_for('site_detail', site_id=site.id) }}">Back to site</a>
+      | Period:
+      {% for d in (30, 90) %}<a href="{{ url_for('site_report', site_id=site.id, days=d) }}">{{ d }} days</a> {% endfor %}
+    </div>
+
+    <h1>Security monitoring report</h1>
+    <p class="meta">{{ site.name }} &middot; {{ site.url }}<br>Generated {{ generated_at[:10] }} &middot; covers the last {{ days }} days</p>
+
+    {% set counts = {} %}
+    {% for f in findings %}{% set _ = counts.update({f.severity: counts.get(f.severity, 0) + 1}) %}{% endfor %}
+    <h2>Summary</h2>
+    {% if findings %}
+      <p>There {{ 'is' if findings|length == 1 else 'are' }} <strong>{{ findings|length }} open issue{{ '' if findings|length == 1 else 's' }}</strong>
+      {%- if fixed %}, and {{ fixed|length }} issue{{ '' if fixed|length == 1 else 's' }} fixed in this period{% endif %}.
+      Fix them in the order listed: the most serious come first.</p>
+    {% else %}
+      <p><strong>No open issues.</strong>{% if fixed %} {{ fixed|length }} issue{{ '' if fixed|length == 1 else 's' }} fixed in this period.{% endif %}</p>
+    {% endif %}
+    <table>
+      <tr><th>Critical</th><th>High</th><th>Medium</th><th>Low</th><th>Fixed this period</th></tr>
+      <tr><td>{{ counts.get('Critical', 0) }}</td><td>{{ counts.get('High', 0) }}</td><td>{{ counts.get('Medium', 0) }}</td><td>{{ counts.get('Low', 0) }}</td><td>{{ fixed|length }}</td></tr>
+    </table>
+
+    {% if findings %}
+      <h2>Open issues</h2>
+      {% for f in findings %}
+        <div class="finding sev-{{ f.severity|lower }}">
+          <strong>{{ loop.index }}. [{{ f.severity }}] {{ f.title }}</strong><br>
+          <em>Why it matters:</em> {{ f.detail }}<br>
+          {% if f.analyst_note %}<em>Analyst note:</em> {{ f.analyst_note }}<br>{% endif %}
+          <em>How to fix:</em> {{ f.fix }}<br>
+          <em>Evidence:</em> <code>{{ f.evidence or 'none recorded' }}</code><br>
+          <small>First detected {{ f.first_seen[:10] }}, still present on {{ f.last_seen[:10] }}</small>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if fixed %}
+      <h2>Fixed and confirmed by retest</h2>
+      <table>
+        <tr><th>Issue</th><th>Severity</th><th>First detected</th><th>Confirmed fixed</th></tr>
+        {% for f in fixed %}
+          <tr><td>{{ f.title }}</td><td>{{ f.severity }}</td><td>{{ f.first_seen[:10] }}</td><td>{{ f.resolved_at[:10] }}</td></tr>
+        {% endfor %}
+      </table>
+    {% endif %}
+
+    <h2>Scope and method</h2>
+    <p>
+      Monitoring of {{ site.url }} under written authorisation {{ site.authorisation_ref or '(not recorded)' }}
+      signed {{ site.authorised_on or '(not recorded)' }}{% if site.scope_notes %}; scope: {{ site.scope_notes }}{% endif %}.
+      The site is checked automatically every {{ site.interval_hours }} hours
+      {%- if last_scan %}; the latest check ran {{ last_scan.started_at[:16]|replace('T', ' ') }} UTC{% endif %}.
+      Checks cover the TLS certificate, HTTPS configuration, security headers, cookie settings, software version disclosure and publicly exposed files
+      {%- if site.active_tests %}, plus non-destructive SQL injection and cross-site scripting probes{% endif %}.
+      Every finding is reviewed by an analyst before it is reported.
+    </p>
+    <p><small>This is external monitoring, not a full penetration test. It does not test logged-in areas, internal systems or business logic. Evidence never includes the contents of exposed files.</small></p>
+  </body>
+</html>

@@ -53,9 +53,20 @@ def test_sqli_and_xss(fake_site):
             body += parse_qs(urlparse(path).query).get('q', [''])[0]
         return body.encode()
     fake_site.default = (200, {}, page)
-    found = keys(checks.run_all(fake_site.url)[0])
+    found = keys(checks.run_all(fake_site.url, active=True)[0])
     assert ('sqli', 'id-param') in found
     assert ('xss', 'q-param') in found
+
+def test_active_probes_only_when_authorised(fake_site):
+    checks.run_all(fake_site.url)
+    assert not [r for r in fake_site.requests if 'id=' in r or 'q=' in r]
+
+def test_findings_carry_evidence(fake_site):
+    fake_site.default = (200, {'X-Powered-By': 'PHP/7.2.1'}, b'<html></html>')
+    findings = checks.run_all(fake_site.url)[0]
+    powered = [f for f in findings if f['key'] == 'x-powered-by'][0]
+    assert 'HTTP 200' in powered['evidence'] and 'PHP/7.2.1' in powered['evidence']
+    assert all(f['evidence'] for f in findings)
 
 def test_redirect_to_blocked_host_is_refused(fake_site, monkeypatch):
     from scanner import target

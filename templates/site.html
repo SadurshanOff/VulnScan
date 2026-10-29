@@ -12,41 +12,107 @@
       <strong>URL:</strong> {{ site.url }}<br>
       <strong>Alerts to:</strong> {{ site.owner_email or '' }} {{ ('Telegram ' ~ site.telegram_chat_id) if site.telegram_chat_id else '' }}<br>
       <strong>Scan every:</strong> {{ site.interval_hours }} hours<br>
-      <strong>Status:</strong> {{ ('Monitoring since ' ~ site.verified_at) if site.verified_at else 'Awaiting verification' }}
+      <strong>Authorisation:</strong>
+      {% if site.authorised_on %}
+        signed {{ site.authorised_on }} ({{ site.authorisation_ref }}),
+        {{ 'passive and active tests' if site.active_tests else 'passive checks only' }}
+      {% else %}
+        <span class="danger">not recorded - scanning is blocked</span>
+      {% endif %}<br>
+      <strong>Ownership:</strong> {{ ('verified ' ~ site.verified_at) if site.verified_at else 'awaiting verification' }}
     </p>
+
+    <details {{ 'open' if not site.authorised_on }}>
+      <summary><strong>Written authorisation</strong></summary>
+      <p>Record the client's signed authorisation before any scan. Only allow active tests (SQL injection and XSS probes) if the signed scope explicitly includes them.</p>
+      <form method="POST" action="{{ url_for('site_authorisation', site_id=site.id) }}" class="stacked">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Date signed <input type="date" name="authorised_on" value="{{ site.authorised_on or '' }}"></label>
+        <label>Document reference <input type="text" name="authorisation_ref" value="{{ site.authorisation_ref or '' }}" placeholder="e.g. AUTH-2026-001 signed by A. Khan"></label>
+        <label>Scope notes <input type="text" name="scope_notes" value="{{ site.scope_notes or '' }}" placeholder="e.g. www.example.ae only, weekdays"></label>
+        <label><input type="checkbox" name="active_tests" value="1" {{ 'checked' if site.active_tests }}> Client authorised active tests</label>
+        <button type="submit">Save authorisation</button>
+      </form>
+    </details>
 
     {% if not site.verified_at %}
       <h2>Verify ownership</h2>
       <p>Ask the site owner to create a file at <code>{{ verification_url }}</code> containing exactly:</p>
       <pre>{{ site.verify_token }}</pre>
     {% endif %}
-    <form method="POST" action="{{ url_for('site_verify', site_id=site.id) }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit">Verify</button>
-    </form>
-    {% if site.verified_at %}
-      <form method="POST" action="{{ url_for('site_scan', site_id=site.id) }}" class="inline">
+    <p>
+      <form method="POST" action="{{ url_for('site_verify', site_id=site.id) }}" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit">Scan now</button>
+        <button type="submit">Verify</button>
       </form>
-    {% endif %}
-    <form method="POST" action="{{ url_for('site_delete', site_id=site.id) }}" class="inline"
-          onsubmit="return confirm('Stop monitoring and delete all history for this site?');">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit">Delete</button>
-    </form>
+      {% if site.verified_at and site.authorised_on %}
+        <form method="POST" action="{{ url_for('site_scan', site_id=site.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit">Scan now / retest</button>
+        </form>
+      {% endif %}
+      <a href="{{ url_for('site_report', site_id=site.id) }}">Client report</a>
+      <form method="POST" action="{{ url_for('site_delete', site_id=site.id) }}" class="inline"
+            onsubmit="return confirm('Stop monitoring and delete all history for this site?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Delete</button>
+      </form>
+    </p>
 
-    <h2>Open issues ({{ findings|length }})</h2>
-    {% for f in findings %}
+    <h2>Waiting for your review ({{ pending|length }})</h2>
+    {% for f in pending %}
       <div class="finding sev-{{ f.severity|lower }}">
         <strong>[{{ f.severity }}] {{ f.title }}</strong><br>
         {{ f.detail }}<br>
+        <em>Evidence:</em> <code>{{ f.evidence or 'none recorded' }}</code><br>
         <em>Fix:</em> {{ f.fix }}<br>
         <small>First seen {{ f.first_seen }}</small>
+        <form method="POST" action="{{ url_for('finding_review', finding_id=f.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="text" name="analyst_note" placeholder="Optional note for the client: what this means for them" size="60">
+          <button type="submit" name="status" value="approved">Approve</button>
+          <button type="submit" name="status" value="dismissed">Dismiss (false positive)</button>
+        </form>
+      </div>
+    {% else %}
+      <p>Nothing to review.</p>
+    {% endfor %}
+
+    <h2>Open issues shown to the client ({{ approved|length }})</h2>
+    {% if unnotified %}
+      <form method="POST" action="{{ url_for('site_notify', site_id=site.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Send {{ unnotified|length }} approved finding(s) to the client</button>
+      </form>
+    {% endif %}
+    {% for f in approved %}
+      <div class="finding sev-{{ f.severity|lower }}">
+        <strong>[{{ f.severity }}] {{ f.title }}</strong>
+        {{ '' if f.notified_at else '(not sent yet)' }}<br>
+        {{ f.detail }}<br>
+        {% if f.analyst_note %}<em>Analyst note:</em> {{ f.analyst_note }}<br>{% endif %}
+        <em>Evidence:</em> <code>{{ f.evidence or 'none recorded' }}</code><br>
+        <em>Fix:</em> {{ f.fix }}<br>
+        <small>First seen {{ f.first_seen }}, last seen {{ f.last_seen }}</small>
       </div>
     {% else %}
       <p>No open issues.</p>
     {% endfor %}
+
+    {% if dismissed %}
+      <details>
+        <summary>Dismissed as false positives ({{ dismissed|length }})</summary>
+        {% for f in dismissed %}
+          <div class="finding">
+            [{{ f.severity }}] {{ f.title }} - <code>{{ f.evidence }}</code>
+            <form method="POST" action="{{ url_for('finding_review', finding_id=f.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" name="status" value="pending">Reopen</button>
+            </form>
+          </div>
+        {% endfor %}
+      </details>
+    {% endif %}
 
     <h2>Recent scans</h2>
     <table>

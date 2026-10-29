@@ -20,7 +20,19 @@ All checks are low-impact (about 15 ordinary requests per scan) and never modify
 | SQL injection | Database errors returned when a quote is added to the `id` parameter |
 | Reflected XSS | A script in the `q` parameter echoed back unescaped |
 
-Each finding is alerted once. When a later scan no longer sees it, the owner gets a "fixed" message. A weekly summary confirms monitoring is alive.
+The TLS, HTTPS, header, cookie, disclosure and exposed-file checks are passive: ordinary page requests. The SQL injection and XSS probes are **active tests** and only run for a site whose recorded written authorisation explicitly allows them.
+
+## How the service works
+
+1. **Authorise:** record the client's signed authorisation (date, document reference, scope, and whether active tests are allowed). Sites without one are never scanned.
+2. **Verify:** the client proves they control the site by publishing a token file.
+3. **Scan:** the worker checks the site on schedule and stores every finding with its evidence (request, status code, matching header), never the contents of exposed files.
+4. **Review:** new findings wait in your review queue, and you get a "review needed" message. Approve them, optionally with a note in plain language for the client, or dismiss false positives.
+5. **Notify:** one click sends the approved findings to the client by email or Telegram.
+6. **Fix and retest:** when a later scan, or a manual retest, no longer sees an issue, it is marked fixed and the client is told.
+7. **Report:** each site has a printable client report (save as PDF) with a summary, prioritised findings, evidence, fixes, and what was confirmed fixed.
+
+Set `VULNSCAN_REVIEW_REQUIRED=0` to skip review and alert clients directly.
 
 ## How it works
 
@@ -71,12 +83,27 @@ All settings are environment variables; see [`.env.example`](.env.example).
 | `VULNSCAN_CONTACT_URL` | Shown in the scanner's User-Agent so site hosts know who is scanning |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | Email alerts |
 | `TELEGRAM_BOT_TOKEN` | Telegram alerts (create a bot with @BotFather) |
+| `VULNSCAN_REVIEW_REQUIRED` | 1 (default): findings wait for your approval; 0: alert clients directly |
+| `VULNSCAN_ADMIN_EMAIL`, `VULNSCAN_ADMIN_TELEGRAM_CHAT_ID` | Where "review needed" messages go |
 | `VULNSCAN_ALLOW_PRIVATE=1` | Allow localhost / private network targets, for lab testing only |
 | `FLASK_DEBUG=1` | Debug mode; never on a reachable host |
 
+## Demo
+
+`demo/vulnerable_site.py` is a deliberately weak local site that triggers every check, for sales demos and testing. Never expose it to the internet.
+
+```bash
+export VULNSCAN_ALLOW_PRIVATE=1 VULNSCAN_ADMIN_PASSWORD=demo
+python app.py &                                        # dashboard on :5000
+# add http://127.0.0.1:8080/ in the dashboard, record an authorisation, copy the token, then:
+python -m demo.vulnerable_site --port 8080 --token <token>
+```
+
+Verify, scan, approve the findings and open the client report. To demo a retest, restart the demo site with `--fixed` and click **Scan now / retest**: the report then lists the issues as fixed.
+
 ## Onboarding a client
 
-1. Get the client's written permission to monitor their site.
+1. Get the client's signed authorisation to monitor their site, and record it on the site page.
 2. In the dashboard, open **Monitored sites** and add the site with the owner's email and/or Telegram chat id. To find a chat id, the owner messages your bot and you open `https://api.telegram.org/bot<token>/getUpdates`.
 3. Send the owner the verification token shown on the site page. They publish it as the only content of `https://their-site/.well-known/vulnscan-verify.txt`.
 4. Click **Verify**. The worker starts scanning on its next pass, and the owner gets their first report.
