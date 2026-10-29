@@ -85,3 +85,12 @@ def test_worker_pauses_site_when_token_removed(fake_site, conn, monkeypatch):
     assert db.get_site(conn, site['id'])['verified_at'] is None
     assert 'paused' in alerts[0]
     assert fake_site.requests == [verify.VERIFY_PATH]
+
+def test_test_alert_cli_reports_missing_config(monkeypatch, capsys):
+    import pytest
+    monkeypatch.setattr(notify.config, 'TELEGRAM_BOT_TOKEN', None)
+    monkeypatch.setattr('sys.argv', ['notify', '--telegram', '123'])
+    with pytest.raises(SystemExit) as exit_info:
+        notify.main()
+    assert exit_info.value.code == 1
+    assert 'TELEGRAM_BOT_TOKEN is not set' in capsys.readouterr().out

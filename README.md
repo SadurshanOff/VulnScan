@@ -37,7 +37,13 @@ cp .env.example .env    # then edit .env
 docker compose up -d --build
 ```
 
-The dashboard listens on `127.0.0.1:8000`. Put it behind a reverse proxy with HTTPS (Caddy or nginx) before exposing it.
+The dashboard listens on `127.0.0.1:8000`. Add `--profile https` to also start Caddy, which serves it on `VULNSCAN_DOMAIN` with an automatic HTTPS certificate. See the full [deployment guide](docs/DEPLOY.md) for a step-by-step production setup.
+
+To check your email and Telegram settings, send a test alert:
+
+```bash
+python -m monitor.notify --email you@example.com --telegram 123456789
+```
 
 ### Locally
 

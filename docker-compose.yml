@@ -14,5 +14,20 @@ services:
     volumes:
       - data:/data
     restart: unless-stopped
+  # Optional HTTPS front end: docker compose --profile https up -d
+  caddy:
+    image: caddy:2.8.4
+    profiles: ["https"]
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - web
+    restart: unless-stopped
 volumes:
   data:
+  caddy_data:
